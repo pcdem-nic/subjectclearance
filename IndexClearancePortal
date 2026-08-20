@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pending Subjects Checker</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    
+    <!-- Babel for in-browser JSX parsing -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+            /* Subtle academic pattern background */
+            background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.4s ease-out forwards;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800">
+
+    <div id="root" class="flex-grow flex flex-col"></div>
+
+    <script type="text/babel">
+        // ==========================================
+        // CONFIGURATION & DATA LAYER
+        // ==========================================
+        
+        // To connect to a real Google Sheet:
+        // 1. Create a Google Sheet.
+        // 2. Go to File > Share > Publish to web.
+        // 3. Choose "Entire Document" and "Comma-separated values (.csv)".
+        // 4. Copy the link and paste it here replacing 'DEMO_MODE'.
+        const GOOGLE_SHEETS_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSOgkhBM6bm6IzPXe7cXLSOv6vK6nQ_-0-1b9LVjmXLE7ZOGsx8HkR-1_-Knt4A7w5b7vjrUigs-DBd/pub?gid=773618836&single=true&output=csv'; 
+
+        // Mock CSV Data simulating a Google Sheet response
+        const MOCK_CSV_DATA = `Student ID,Student Name,Subject Code,Subject Name,Semester,Status,Link
+STU1001,John Doe,CS201,Data Structures,Sem 3,Pending,/subject/CS201
+STU1001,John Doe,MA202,Engineering Mathematics II,Sem 3,Incomplete,/subject/MA202
+STU1002,Jane Smith,PH101,Physics I,Sem 1,Failed,/subject/PH101
+STU1003,Alice Johnson,CS305,Database Systems,Sem 4,Pending,/subject/CS305
+STU1004,Bob Brown,,,,,`; 
+        // Note: STU1004 represents a student with no pending subjects.
+
+        // Simple CSV Parser
+        const parseCSV = (csvText) => {
+            const lines = csvText.split('\n').filter(line => line.trim() !== '');
+            if (lines.length < 2) return [];
+            
+            const headers = lines[0].split(',').map(header => header.trim());
+            const data = [];
+            
+            for (let i = 1; i < lines.length; i++) {
+                // Handle basic commas (does not handle commas inside quotes for this simple implementation)
+                const values = lines[i].split(',').map(val => val.trim());
+                const row = {};
+                headers.forEach((header, index) => {
+                    row[header] = values[index] || '';
+                });
+                data.push(row);
+            }
+            return data;
+        };
+
+        // Simulated API Service
+        const fetchStudentData = async (studentId) => {
+            try {
+                let csvText = '';
+                
+                if (GOOGLE_SHEETS_CSV_URL === 'DEMO_MODE') {
+                    // Simulate network delay
+                    await new Promise(resolve => setTimeout(resolve, 800));
+                    csvText = MOCK_CSV_DATA;
+                } else {
+                    /* 
+                     * SECURITY NOTE FOR PRODUCTION:
+                     * Fetching a published CSV downloads the entire dataset to the client browser.
+                     * While the UI only displays the queried student's data, a tech-savvy user 
+                     * could inspect the network tab to see other students' data.
+                     * For strict privacy, replace this direct fetch with a call to a serverless 
+                     * function (e.g., Node.js, Google Apps Script) that handles the filtering on the server.
+                     */
+                    const response = await fetch(GOOGLE_SHEETS_CSV_URL);
+                    if (!response.ok) throw new Error('Failed to connect to database.');
+                    csvText = await response.text();
+                }
+
+                const allRecords = parseCSV(csvText);
+                
+                // Filter records for the specific student
+                const studentRecords = allRecords.filter(
+                    record => record['Student ID'].toUpperCase() === studentId.toUpperCase()
+                );
+
+                if (studentRecords.length === 0) {
+                    return { status: 'not_found' };
+                }
+
+                // Extract student metadata (assuming consistency across rows for the same student)
+                const studentName = studentRecords[0]['Student Name'];
+                const formattedStudentId = studentRecords[0]['Student ID'];
+
+                // Filter out empty rows (e.g., student exists but has no pending subjects)
+                const subjects = studentRecords.filter(record => record['Subject Code'] !== '').map(record => ({
+                    code: record['Subject Code'],
+                    name: record['Subject Name'],
+                    semester: record['Semester'],
+                    status: record['Status'],
+                    link: record['Link']
+                }));
+
+                if (subjects.length === 0) {
+                    return { status: 'no_pending', name: studentName, id: formattedStudentId };
+                }
+
+                return {
+                    status: 'found',
+                    name: studentName,
+                    id: formattedStudentId,
+                    subjects: subjects
+                };
+
+            } catch (error) {
+                console.error("Data Fetch Error:", error);
+                return { status: 'error', message: error.message };
+            }
+        };
+
+        const { useState, useEffect } = React;
+
+        // --- COMPONENTS ---
+
+        const StatusBadge = ({ status }) => {
+            let colorClasses = "bg-gray-100 text-gray-800 border-gray-200";
+            const lowerStatus = status.toLowerCase();
+            
+            if (lowerStatus === 'pending') {
+                colorClasses = "bg-amber-100 text-amber-800 border-amber-200";
+            } else if (lowerStatus === 'incomplete') {
+                colorClasses = "bg-blue-100 text-blue-800 border-blue-200";
+            } else if (lowerStatus === 'failed') {
+                colorClasses = "bg-red-100 text-red-800 border-red-200";
+            }
+
+            return (
+                <span className={`px-3 py-1 text-xs font-semibold rounded-full border ${colorClasses}`}>
+                    {status}
+                </span>
+            );
+        };
+
+        const SubjectTable = ({ subjects }) => (
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm hidden md:block fade-in">
+                <table className="w-full text-left border-collapse">
+                    <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 text-sm uppercase tracking-wider">
+                            <th className="p-4 font-semibold">Subject Code</th>
+                            <th className="p-4 font-semibold">Subject Name</th>
+                            <th className="p-4 font-semibold">Semester</th>
+                            <th className="p-4 font-semibold">Status</th>
+                            <th className="p-4 font-semibold text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                        {subjects.map((subject, index) => (
+                            <tr key={index} className="hover:bg-slate-50 transition-colors">
+                                <td className="p-4 font-medium text-slate-900">{subject.code}</td>
+                                <td className="p-4 text-slate-700">{subject.name}</td>
+                                <td className="p-4 text-slate-600">{subject.semester}</td>
+                                <td className="p-4"><StatusBadge status={subject.status} /></td>
+                                <td className="p-4 text-right">
+                                    {subject.link && subject.link !== '' ? (
+                                        <a href={subject.link} onClick={(e) => {e.preventDefault(); console.log(`Navigating to ${subject.link}`)}} className="inline-flex items-center gap-1 px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors">
+                                            View Details
+                                            <i className="ph ph-arrow-right"></i>
+                                        </a>
+                                    ) : (
+                                        <span className="text-slate-400 text-sm">N/A</span>
+                                    )}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        );
+
+        const SubjectCardList = ({ subjects }) => (
+            <div className="grid grid-cols-1 gap-4 md:hidden fade-in">
+                {subjects.map((subject, index) => (
+                    <div key={index} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
+                        {/* Decorative side accent */}
+                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500"></div>
+                        
+                        <div className="flex justify-between items-start mb-3">
+                            <div>
+                                <span className="text-xs font-bold text-slate-400 tracking-wider uppercase">{subject.code}</span>
+                                <h3 className="font-semibold text-slate-900 text-lg leading-tight mt-1">{subject.name}</h3>
+                            </div>
+                            <StatusBadge status={subject.status} />
+                        </div>
+                        
+                        <div className="flex items-center text-sm text-slate-600 mb-4 gap-2">
+                            <i className="ph ph-calendar-blank text-slate-400"></i>
+                            {subject.semester}
+                        </div>
+                        
+                        <div className="pt-4 border-t border-slate-100">
+                             {subject.link && subject.link !== '' ? (
+                                <a href={subject.link} onClick={(e) => {e.preventDefault(); console.log(`Navigating to ${subject.link}`)}} className="flex items-center justify-center w-full gap-2 px-4 py-2.5 text-sm font-semibold text-indigo-700 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors">
+                                    View Subject Details
+                                    <i className="ph ph-arrow-right"></i>
+                                </a>
+                            ) : (
+                                <button disabled className="w-full px-4 py-2 text-sm font-medium text-slate-400 bg-slate-50 rounded-lg cursor-not-allowed">
+                                    No Action Available
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                ))}
+            </div>
+        );
+
+        const App = () => {
+            const [appState, setAppState] = useState('idle'); // idle, loading, results, empty, error
+            const [studentIdInput, setStudentIdInput] = useState('');
+            const [data, setData] = useState(null);
+            const [errorMsg, setErrorMsg] = useState('');
+
+            const handleSearch = async (e) => {
+                e.preventDefault();
+                
+                const sanitizedInput = studentIdInput.trim();
+                if (!sanitizedInput) {
+                    setErrorMsg('Please enter a valid Student ID.');
+                    setAppState('error');
+                    return;
+                }
+
+                setAppState('loading');
+                setErrorMsg('');
+
+                const result = await fetchStudentData(sanitizedInput);
+
+                if (result.status === 'not_found') {
+                    setErrorMsg(`No records found for Student ID: ${sanitizedInput}`);
+                    setAppState('error');
+                } else if (result.status === 'no_pending') {
+                    setData({ name: result.name, id: result.id, subjects: [] });
+                    setAppState('empty');
+                } else if (result.status === 'error') {
+                    setErrorMsg('An error occurred while fetching data. Please try again later.');
+                    setAppState('error');
+                } else {
+                    setData({ name: result.name, id: result.id, subjects: result.subjects });
+                    setAppState('results');
+                }
+            };
+
+            const resetSearch = () => {
+                setStudentIdInput('');
+                setAppState('idle');
+                setData(null);
+            };
+
+            return (
+                <div className="flex flex-col min-h-screen">
+                    {/* Header */}
+                    <header className="bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm">
+                        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center gap-3">
+                            <div className="w-10 h-10 bg-indigo-900 rounded-lg flex items-center justify-center text-white shadow-md">
+                                <i className="ph-fill ph-student text-2xl"></i>
+                            </div>
+                            <div>
+                                <h1 className="text-xl font-bold text-slate-900 leading-tight">University Portal</h1>
+                                <p className="text-xs text-slate-500 font-medium">Academic Records</p>
+                            </div>
+                        </div>
+                    </header>
+
+                    {/* Main Content Area */}
+                    <main className="flex-grow flex items-center justify-center p-4 sm:p-6 lg:p-8">
+                        <div className="w-full max-w-4xl mx-auto">
+                            
+                            {}
+                            {/* SEARCH STATE */}
+                            {appState === 'idle' && (
+                                <div className="max-w-md mx-auto bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100 fade-in">
+                                    <div className="bg-indigo-900 p-8 text-center">
+                                        <div className="inline-flex items-center justify-center w-16 h-16 bg-white/10 rounded-full mb-4">
+                                            <i className="ph ph-magnifying-glass text-3xl text-white"></i>
+                                        </div>
+                                        <h2 className="text-2xl font-bold text-white mb-2">Pending Subjects</h2>
+                                        <p className="text-indigo-200 text-sm">Enter your Student ID to securely view your incomplete or pending subjects.</p>
+                                    </div>
+                                    
+                                    <div className="p-8">
+                                        <form onSubmit={handleSearch} className="space-y-6">
+                                            <div>
+                                                <label htmlFor="studentId" className="block text-sm font-semibold text-slate-700 mb-2">
+                                                    Student ID
+                                                </label>
+                                                <div className="relative">
+                                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                                        <i className="ph ph-identification-card text-slate-400 text-lg"></i>
+                                                    </div>
+                                                    <input
+                                                        type="text"
+                                                        id="studentId"
+                                                        value={studentIdInput}
+                                                        onChange={(e) => setStudentIdInput(e.target.value)}
+                                                        placeholder="e.g. STU1001"
+                                                        className="block w-full pl-10 pr-3 py-3 border border-slate-300 rounded-xl leading-5 bg-slate-50 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:bg-white transition-colors sm:text-sm uppercase"
+                                                        autoComplete="off"
+                                                    />
+                                                </div>
+                                                <p className="text-xs text-slate-500 mt-2">
+                                                    Try: <button type="button" onClick={() => setStudentIdInput('STU1001')} className="text-indigo-600 font-semibold hover:underline">STU1001</button>, <button type="button" onClick={() => setStudentIdInput('STU1004')} className="text-indigo-600 font-semibold hover:underline">STU1004</button>
+                                                </p>
+                                            </div>
+                                            <button
+                                                type="submit"
+                                                disabled={!studentIdInput.trim()}
+                                                className="w-full flex justify-center py-3.5 px-4 border border-transparent rounded-xl shadow-sm text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                            >
+                                                Check Pending Subjects
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* LOADING STATE */}
+                            {appState === 'loading' && (
+                                <div className="flex flex-col items-center justify-center py-20 fade-in">
+                                    <i className="ph ph-spinner-gap text-4xl text-indigo-600 animate-spin mb-4"></i>
+                                    <p className="text-slate-600 font-medium">Securely fetching records from database...</p>
+                                </div>
+                            )}
+
+                            {/* ERROR STATE */}
+                            {appState === 'error' && (
+                                <div className="max-w-md mx-auto text-center fade-in bg-white p-8 rounded-2xl shadow-lg border border-slate-100">
+                                    <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <i className="ph ph-warning-circle text-3xl"></i>
+                                    </div>
+                                    <h2 className="text-xl font-bold text-slate-900 mb-2">Access Error</h2>
+                                    <p className="text-slate-600 mb-8">{errorMsg}</p>
+                                    <button
+                                        onClick={() => setAppState('idle')}
+                                        className="inline-flex justify-center items-center gap-2 py-2.5 px-6 border border-slate-300 rounded-lg shadow-sm text-sm font-semibold text-slate-700 bg-white hover:bg-slate-50 focus:outline-none transition-colors"
+                                    >
+                                        <i className="ph ph-arrow-left"></i>
+                                        Try Another ID
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* EMPTY STATE (No pending subjects) */}
+                            {appState === 'empty' && (
+                                <div className="max-w-2xl mx-auto fade-in">
+                                    {/* Student Header Summary */}
+                                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center">
+                                                <i className="ph ph-user text-2xl text-slate-500"></i>
+                                            </div>
+                                            <div>
+                                                <h2 className="text-xl font-bold text-slate-900">{data.name}</h2>
+                                                <p className="text-sm text-slate-500 font-medium font-mono">{data.id}</p>
+                                            </div>
+                                        </div>
+                                        <button onClick={resetSearch} className="text-sm font-semibold text-indigo-600 hover:text-indigo-800 transition-colors py-2 px-4 bg-indigo-50 hover:bg-indigo-100 rounded-lg">
+                                            Check Another ID
+                                        </button>
+                                    </div>
+
+                                    <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-10 text-center shadow-sm">
+                                        <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                                            <i className="ph-fill ph-check-circle text-4xl"></i>
+                                        </div>
+                                        <h2 className="text-2xl font-bold text-emerald-900 mb-3">Congratulations!</h2>
+                                        <p className="text-emerald-700 max-w-md mx-auto text-lg">
+                                            You currently have no pending or incomplete subjects on record. Great job!
+                                        </p>
+                                        <p className="text-emerald-600/80 text-sm mt-6">
+                                            If you believe this is an error, please contact the academic registry.
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* RESULTS STATE (Dashboard) */}
+                            {appState === 'results' && (
+                                <div className="fade-in space-y-6">
+                                    
+                                    {/* Dashboard Header */}
+                                    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-bl-full -mr-10 -mt-10 z-0"></div>
+                                        
+                                        <div className="flex items-center gap-5 z-10">
+                                            <div className="w-14 h-14 bg-indigo-100 rounded-full flex items-center justify-center flex-shrink-0 border-4 border-white shadow-sm">
+                                                <i className="ph-fill ph-user text-2xl text-indigo-700"></i>
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-semibold text-indigo-600 uppercase tracking-wider mb-1">Student Profile</p>
+                                                <h2 className="text-2xl font-bold text-slate-900 leading-none mb-1">{data.name}</h2>
+                                                <p className="text-slate-500 font-mono text-sm">{data.id}</p>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex flex-row items-center gap-6 w-full md:w-auto z-10 border-t border-slate-100 pt-4 md:border-0 md:pt-0">
+                                            <div className="text-center md:text-right flex-grow md:flex-grow-0">
+                                                <p className="text-sm font-medium text-slate-500 mb-1">Pending Subjects</p>
+                                                <p className="text-3xl font-black text-amber-500">{data.subjects.length}</p>
+                                            </div>
+                                            <div className="w-px h-12 bg-slate-200 hidden md:block"></div>
+                                            <button onClick={resetSearch} className="whitespace-nowrap flex items-center gap-2 py-2.5 px-4 bg-white border border-slate-300 rounded-xl shadow-sm text-sm font-semibold text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all">
+                                                <i className="ph ph-sign-out"></i>
+                                                Exit
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Subject List Area */}
+                                    <div className="space-y-4">
+                                        <h3 className="text-lg font-bold text-slate-800 px-1">Action Required</h3>
+                                        
+                                        <SubjectTable subjects={data.subjects} />
+                                        <SubjectCardList subjects={data.subjects} />
+                                        
+                                    </div>
+                                    
+                                    <div className="text-center mt-8">
+                                         <p className="text-xs text-slate-400">Data securely fetched from Google Sheets database.</p>
+                                    </div>
+                                </div>
+                            )}
+
+                        </div>
+                    </main>
+
+                    {/* Footer */}
+                    <footer className="bg-white border-t border-slate-200 py-6 mt-auto">
+                        <div className="max-w-5xl mx-auto px-4 text-center text-slate-500 text-sm">
+                            <p>&copy; {new Date().getFullYear()} University Portal. All rights reserved.</p>
+                        </div>
+                    </footer>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

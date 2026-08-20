@@ -209,10 +209,10 @@ STU1004,Bob Brown,,,,,`;
                                 <td className="p-4"><StatusBadge status={subject.status} /></td>
                                 <td className="p-4 text-right">
                                     {subject.link && subject.link !== '' ? (
-                                        <a href={subject.link} onClick={(e) => {e.preventDefault(); console.log(`Navigating to ${subject.link}`)}} className="inline-flex items-center gap-1 px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors">
-                                            View Details
-                                            <i className="ph ph-arrow-right"></i>
-                                        </a>
+                                        <a href={subject.link} className="inline-flex items-center gap-1 px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors">
+    View Details
+    <i className="ph ph-arrow-right"></i>
+</a>
                                     ) : (
                                         <span className="text-slate-400 text-sm">N/A</span>
                                     )}
@@ -247,9 +247,10 @@ STU1004,Bob Brown,,,,,`;
                         <div className="pt-4 border-t border-slate-100">
                              {subject.link && subject.link !== '' ? (
                                 <a href={subject.link} onClick={(e) => {e.preventDefault(); console.log(`Navigating to ${subject.link}`)}} className="flex items-center justify-center w-full gap-2 px-4 py-2.5 text-sm font-semibold text-indigo-700 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors">
-                                    View Subject Details
-                                    <i className="ph ph-arrow-right"></i>
-                                </a>
+                                   <a href={subject.link} className="flex items-center justify-center w-full gap-2 px-4 py-2.5 text-sm font-semibold text-indigo-700 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors">
+    View Subject Details
+    <i className="ph ph-arrow-right"></i>
+</a>
                             ) : (
                                 <button disabled className="w-full px-4 py-2 text-sm font-medium text-slate-400 bg-slate-50 rounded-lg cursor-not-allowed">
                                     No Action Available
@@ -312,7 +313,7 @@ STU1004,Bob Brown,,,,,`;
                                 <i className="ph-fill ph-student text-2xl"></i>
                             </div>
                             <div>
-                                <h1 className="text-xl font-bold text-slate-900 leading-tight">University Portal</h1>
+                                <h1 className="text-xl font-bold text-slate-900 leading-tight">Newton International College</h1>
                                 <p className="text-xs text-slate-500 font-medium">Academic Records</p>
                             </div>
                         </div>
@@ -349,9 +350,9 @@ STU1004,Bob Brown,,,,,`;
                                                         id="studentId"
                                                         value={studentIdInput}
                                                         onChange={(e) => setStudentIdInput(e.target.value)}
-                                                        placeholder="e.g. STU1001"
+                                                        placeholder="e.g. DEM112233445566"
                                                         className="block w-full pl-10 pr-3 py-3 border border-slate-300 rounded-xl leading-5 bg-slate-50 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:bg-white transition-colors sm:text-sm uppercase"
-                                                        autoComplete="off"
+                                                        autoComplete="on"
                                                     />
                                                 </div>
                                                 <p className="text-xs text-slate-500 mt-2">
